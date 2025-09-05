@@ -641,26 +641,6 @@ custom_css <- HTML("
   .prisma-grid{ grid-template-columns:1fr; }
 }
 ")
-# ===== HEAD (deve vir APÓS custom_css/custom_palette_overrides) =====
-ui_head <- tags$head(
-  tags$style(custom_css),
-  tags$style(custom_palette_overrides),
-  
-  # correções pontuais necessárias agora
-  tags$style(HTML("
-    /* Esconde a folha A4 global e mostra só dentro do Page Studio */
-    .a4 { display: none; }
-    #page_preview .a4 { display: block; }
-
-    /* Ajustes visuais rápidos */
-    .logo-inicio{ display:block; margin:0 auto 24px; max-width:160px; height:auto; }
-    .centered-content{
-      display:flex; flex-direction:column; align-items:center; justify-content:center;
-      min-height:60vh; text-align:center;
-    }
-  "))
-)
-
 
 # --- Paleta + overrides mínimos (apenas cor) ---
 custom_palette_overrides <- HTML("
@@ -769,10 +749,299 @@ h1, h2, h3, h4, h5, h6{ color:var(--ink-strong); }
 ")
 
 # =========================================
+# HEAD GLOBAL (tudo que estava no header= e nos tags$head())
+# =========================================
+
+ui_head <- tags$head(
+  tags$style(custom_css),
+  tags$style(custom_palette_overrides),
+  
+  # --- JS: Abstracts -> contador ---
+  tags$script(HTML(
+    "(function(){
+  function countWords(txt){
+    if(!txt){ return 0; }
+    var m = String(txt).trim().match(/\\S+/g);
+    return m ? m.length : 0;
+  }
+  function updateCounter(){
+    try{
+      var ta = document.getElementById('abs_text');
+      var wc = document.getElementById('abs_wc');
+      if(!ta || !wc){ return; }
+      wc.textContent = countWords(ta.value) + ' palavras';
+    }catch(e){}
+  }
+  document.addEventListener('input', function(ev){
+    if (ev && ev.target && ev.target.id === 'abs_text') { updateCounter(); }
+  }, true);
+  window.__absForceCount = function(){ setTimeout(updateCounter, 30); };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(updateCounter, 50); });
+  } else {
+    setTimeout(updateCounter, 50);
+  }
+})();"
+  )),
+  
+  tags$script(HTML("
+(function(){
+  // garante bootstrap disponível
+  if (typeof bootstrap === 'undefined') return;
+
+  function initBS(){
+    // Popovers (com HTML)
+    document.querySelectorAll('[data-bs-toggle=\"popover\"]').forEach(function(el){
+      if (el._popover) return;
+      el._popover = new bootstrap.Popover(el, {html:true, sanitize:false});
+    });
+
+    // Tooltips (se usar em algum lugar)
+    document.querySelectorAll('[data-bs-toggle=\"tooltip\"]').forEach(function(el){
+      if (el._tooltip) return;
+      el._tooltip = new bootstrap.Tooltip(el);
+    });
+
+    // Collapses são auto-ativados pelos data-atr., mas garantir não faz mal
+    document.querySelectorAll('.collapse').forEach(function(el){
+      if (el._collapse) return;
+      el._collapse = new bootstrap.Collapse(el, {toggle:false});
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', initBS);
+  new MutationObserver(initBS).observe(document.documentElement, {childList:true, subtree:true});
+})();
+")),
+  
+  tags$script(HTML("
+Shiny.addCustomMessageHandler('abs_set_example', function(x){
+  var btn = document.getElementById('abs_example_btn');
+  if(!btn) return;
+  if (x.title)   btn.setAttribute('data-bs-title', x.title);
+  if (x.content) btn.setAttribute('data-bs-content', x.content);
+
+  // se já houver popover, atualiza
+  if (typeof bootstrap !== 'undefined') {
+    var pop = bootstrap.Popover.getInstance(btn);
+    if (pop) { pop.setContent({'.popover-header': x.title || '', '.popover-body': x.content || ''}); }
+  }
+});
+")),
+  
+  # --- estilos adicionais: chips + FAB Conectivos ---
+  tags$style(HTML("
+.copy-chip{
+  display:inline-block; padding:6px 10px; border-radius:999px;
+  background:#eef6ff; border:1px solid #213035; margin:4px; cursor:pointer;
+    user-select:none; font-weight:600
+}
+.copy-chip:hover{ background:#e6edf5 }
+    .copy-chip:focus{ outline:2px solid #213035; outline-offset:2px }
+      .chip-wrap{ display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 14px }
+      ")),
+
+  # --- JS original: toasts, highlight, notas (localStorage) ---
+  tags$script(HTML("
+      // Toast 'Salvo' / Feedback
+      let autosaveToast;
+      Shiny.addCustomMessageHandler('savedToast', function(x){
+        if(!autosaveToast){
+          autosaveToast = document.createElement('div');
+          autosaveToast.style.position='fixed';
+          autosaveToast.style.bottom='16px';
+          autosaveToast.style.right='16px';
+          autosaveToast.style.padding='10px 12px';
+          autosaveToast.style.background='#213035';
+          autosaveToast.style.color='white';
+          autosaveToast.style.borderRadius='12px';
+          autosaveToast.style.fontFamily='Inter, system-ui, sans-serif';
+          autosaveToast.style.boxShadow='0 8px 20px rgba(0,0,0,.15)';
+          autosaveToast.style.zIndex=9999;
+          autosaveToast.style.opacity=0;
+          autosaveToast.style.transition='opacity .2s ease';
+          document.body.appendChild(autosaveToast);
+        }
+        autosaveToast.textContent = x.text;
+        autosaveToast.style.opacity=1;
+        setTimeout(()=>autosaveToast.style.opacity=0, 1200);
+      });
+      
+      // Executar JS arbitrário (ex.: print)
+      Shiny.addCustomMessageHandler('jsCode', function(x){
+        try{ eval(x.code); }catch(e){}
+      });
+      
+      // Highlight cartão de exemplo
+      Shiny.addCustomMessageHandler('highlightCard', function(x){
+        const el = document.getElementById(x.id);
+        if(!el) return;
+        el.classList.add('ex-highlight');
+        setTimeout(()=>el.classList.remove('ex-highlight'), 1100);
+      });
+      
+      // Notas rápidas (localStorage)
+      (function(){
+        let notesKey = 'notas_rapidas';
+        function loadNotes(){
+          const ta = document.getElementById('quick_notes');
+          if(!ta) return;
+          const v = localStorage.getItem(notesKey) || '';
+          ta.value = v;
+          Shiny.setInputValue('quick_notes', v, {priority:'event'});
+        }
+        function bind(){
+          const ta = document.getElementById('quick_notes');
+          if(!ta || ta._bound) return;
+          ta._bound = true;
+          ta.addEventListener('input', function(){ localStorage.setItem(notesKey, ta.value); }, {passive:true});
+        }
+        Shiny.addCustomMessageHandler('setNotesKey', function(x){
+          notesKey = x.key || 'notas_rapidas';
+          setTimeout(function(){ loadNotes(); bind(); }, 50);
+        });
+      })();
+      
+      // BANIR autocorreção/gramática no app todo
+      (function(){
+        function nuke(el){
+          if(!el) return;
+          el.setAttribute('spellcheck','false');
+          el.setAttribute('autocomplete','off');
+          el.setAttribute('autocorrect','off');
+          el.setAttribute('autocapitalize','off');
+          el.setAttribute('data-gramm','false');
+          el.setAttribute('data-enable-grammarly','false');
+          el.setAttribute('data-lt-active','false');
+        }
+        function sweep(){
+          document.querySelectorAll('textarea, input[type=\"text\"], [contenteditable=\"true\"]').forEach(nuke);
+        }
+        sweep();
+        const mo = new MutationObserver(sweep);
+        mo.observe(document.documentElement, {childList:true, subtree:true});
+        document.addEventListener('shown.bs.modal', sweep, true);
+      })();
+      
+      // conectivos -> INSERIR direto no textarea (com nonce p/ sempre disparar)
+      (function(){
+        function sendInsert(txt){
+          if (!txt) return;
+          Shiny.setInputValue('insert_term', { text: txt, nonce: Math.random() }, {priority:'event'});
+        }
+        // clique
+        document.addEventListener('click', function(ev){
+          const el = ev.target.closest('.copy-chip');
+          if(!el) return;
+          const txt = (el.getAttribute('data-copy') || el.textContent || '').trim();
+          sendInsert(txt);
+        }, true);
+        // teclado acessível
+        document.addEventListener('keydown', function(ev){
+          const el = ev.target.closest('.copy-chip');
+          if(!el) return;
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            ev.preventDefault();
+            const txt = (el.getAttribute('data-copy') || el.textContent || '').trim();
+            sendInsert(txt);
+          }
+        });
+      })();
+      ")),
+
+  # --- PRINT: Cover Letter ---
+  tags$script(HTML("
+(function(){
+  function bind(){
+    var btn = document.getElementById('ps_print_cover');
+    if(!btn || btn._bound) return;
+    btn._bound = true;
+    btn.addEventListener('click', function(){
+      var node = document.querySelector('#page_preview .a4') || document.querySelector('.a4');
+      if(!node){ alert('Nada para imprimir.'); return; }
+      var html = \"<!doctype html><html><head><meta charset='utf-8'><title>Cover Letter</title>\" +
+                 \"<style>@page{size:A4;margin:20mm;} body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:'Times New Roman',Times,serif;}\" +
+                 \".a4{width:210mm;min-height:297mm;padding:0;border:none;box-shadow:none;}h1{font-size:12pt;font-weight:700;text-align:center;margin:0 0 8pt;}p{font-size:11pt;line-height:1.45;margin:0 0 10pt;text-align:left;}\" +
+                 \"</style></head><body><div class='a4'>\" + node.innerHTML + \"</div></body></html>\";
+      var blob = new Blob([html], {type:'text/html'});
+      var url  = URL.createObjectURL(blob);
+      var win  = window.open(url, '_blank');
+      if(!win){ alert('Permita pop-ups para imprimir.'); return; }
+      var timer = setInterval(function(){
+        try{
+          if (win.document && win.document.readyState === 'complete'){
+            clearInterval(timer);
+            win.focus(); win.print();
+            setTimeout(function(){ try{ win.close(); }catch(e){} URL.revokeObjectURL(url); }, 400);
+          }
+        }catch(e){}
+      }, 120);
+    }, {passive:true});
+  }
+  document.addEventListener('DOMContentLoaded', bind);
+  new MutationObserver(bind).observe(document.documentElement, {childList:true, subtree:true});
+})();
+")),
+  
+      # --- JS: Abstracts -> Enter nos campos extras cola no texto ---
+      tags$script(HTML("
+    (function(){
+      function bindMetaEnter(){
+        document.querySelectorAll('.abs-meta-field').forEach(function(el){
+          if(el._boundAbsMeta) return;
+          el._boundAbsMeta = true;
+          el.addEventListener('keydown', function(ev){
+            if(ev.key === 'Enter'){
+              ev.preventDefault();
+              const t = el.getAttribute('data-meta-type') || '';
+              const v = (el.value || '').trim();
+              if(!v) return;
+              Shiny.setInputValue('abs_meta_add', { type:t, text:v, nonce: Math.random() }, {priority:'event'});
+              el.value = '';
+            }
+          }, {passive:false});
+        });
+      }
+      bindMetaEnter();
+      new MutationObserver(bindMetaEnter).observe(document.documentElement, {childList:true, subtree:true});
+    })();
+  ")),
+      
+      # --- CSS de LOGOS (unificado) ---
+  tags$style(HTML("
+/* Início: CENTRAL acima do título */
+.logo-inicio{
+  position: static !important;
+  display: block;
+  margin: 0 auto 24px;
+  width: auto;            /* deixa o inline max-width:160px funcionar */
+  max-width: 160px;
+  height: auto;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.25));
+  pointer-events: auto;
+}
+
+/* Assistente: marca d'água central (mantém) */
+#assistente-pane{ position: relative; }
+#assistente-pane .logo-assistente{
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%,-50%);
+  opacity: .5;
+  max-width: min(45vw, 520px);
+  width: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+"))
+)
+
+# =========================================
 # UI (tabs)
 # =========================================
 app_ui <- tagList(
-  ui_head,  
+  ui_head,  # <- <head> fora do navbarPage
+  
   navbarPage(
     title = tags$div(
       class = "brand-wrap",
@@ -789,7 +1058,8 @@ app_ui <- tagList(
             tags$img(
               src = "logoapp.png",
               class = "logo-inicio",
-              alt = "Logo Redactum"
+              alt = "Logo Redactum",
+              style = "display:block;margin:0 auto 24px;max-width:160px;height:auto;"
             ),
             h1("Redactum"),
             br(),
@@ -799,12 +1069,7 @@ app_ui <- tagList(
               " na escrita de textos científicos de alto impacto."
             ),
             h5("Para começar, clique em \"Iniciar\" e leia as instruções."),
-            actionButton(
-              "start_btn", "Iniciar",
-              class = "btn btn-primary",
-              style = "margin-top:18px;",
-              title = "Ir para guia"
-            ),
+            actionButton("start_btn", "Iniciar", class = "btn btn-primary", style = "margin-top:18px;", title = "Ir para guia"),
             div(class = "footer-text", "Created and owned by Artur Menegaz de Almeida")
         )
       )
@@ -898,6 +1163,7 @@ app_ui <- tagList(
       "Assistente de Escrita",
       div(
         id = "assistente-pane",
+        tags$img(src = "logoapp.png", class = "logo-assistente", alt = "Logo"),
         fluidPage(
           rclipboardSetup(),
           sidebarLayout(
@@ -914,7 +1180,7 @@ app_ui <- tagList(
               wellPanel(
                 h4("Checklist de Formatação"),
                 checkboxGroupInput("formatting_checklist",
-                                   "Ao transcrever seu texto para o Word/Docs, essa é a forma mais adequada:",
+                                   "Ao transcrever seu texto para o Word/Docs, essa é a formatação mais adequada:",
                                    choices = list(
                                      "Fonte: Times New Roman"         = "font_tnr",
                                      "Tamanho: 12 - Títulos"          = "font_size_titles",
@@ -932,7 +1198,9 @@ app_ui <- tagList(
               checkboxInput("modo_compacto", "Ocultar caixas de exemplos", value = FALSE),
               uiOutput("explicacoes"),
               uiOutput("copy_buttons_exemplo"),
-              uiOutput("refs_simples")  # refs + texto final + copiar
+              
+              # 👉 refs + texto final + botão copiar (mantido conforme você pediu)
+              uiOutput("refs_simples")
             )
           ),
           # FABs
@@ -1002,7 +1270,7 @@ app_ui <- tagList(
                           `data-bs-placement` = "bottom", `data-bs-html` = "true",
                           `data-bs-title` = "Atenção",
                           `data-bs-content` =
-                            "Sempre confirme as <b>guidelines</b> da revista alvo para formato, limites e seções do abstract.",
+                            "Sempre confirme as <b>guidelines</b> (Instruções aos Autores) da revista alvo para formato, limites e seções do abstract.",
                           icon("triangle-exclamation")
                         ),
                         # Exemplo dinâmico
@@ -1044,10 +1312,9 @@ app_ui <- tagList(
                   column(6,
                          div(class="form-group",
                              tags$label("Conflicts of interest"),
-                             # ATENÇÃO: deixe 'data-meta-type' = "trial" para casar com o server
                              tags$input(id="abs_trial", type="text",
                                         class="form-control abs-meta-field",
-                                        `data-meta-type`="trial",
+                                        `data-meta-type`="coi",
                                         placeholder="Ex.: The authors declare no conflicts of interest.")
                          )
                   )
@@ -1092,8 +1359,8 @@ app_ui <- tagList(
         uiOutput("prisma_ui")
       )
     )
-  )  # <-- fecha navbarPage(
-)    # <-- fecha tagList(
+  )
+)
 
 # =========================================
 # Server
