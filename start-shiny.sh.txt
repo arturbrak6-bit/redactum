@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+
+# Fallback para 8080 se PORT não vier do ambiente
+: "${PORT:=8080}"
+
+# Substitui variável no template
+envsubst < /etc/shiny-server/shiny-server.conf.template > /etc/shiny-server/shiny-server.conf
+
+# Inicia o shiny-server
+exec shiny-server

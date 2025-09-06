@@ -1,0 +1,30 @@
+# Dockerfile
+FROM rocker/shiny:latest
+
+# Atualiza e instala o envsubst (gettext-base) para substituir ${PORT} no template
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gettext-base \
+ && rm -rf /var/lib/apt/lists/*
+
+# Instala pacotes R necessários (use o Posit PPM para mais estabilidade)
+RUN R -q -e "options(repos=c(CRAN='https://packagemanager.posit.co/cran/latest')); install.packages(c('shiny','bslib','rclipboard','officer'))"
+
+# Copia app e confs
+WORKDIR /srv/shiny-server
+COPY app.R /srv/shiny-server/
+COPY www/ /srv/shiny-server/www/
+# Template e script de inicialização
+COPY shiny-server.conf.template /etc/shiny-server/shiny-server.conf.template
+COPY start-shiny.sh /usr/local/bin/start-shiny.sh
+
+# Permissões
+RUN chmod +x /usr/local/bin/start-shiny.sh && \
+    chown -R shiny:shiny /srv/shiny-server
+
+# Porta padrão em Cloud Run
+EXPOSE 8080
+
+# Executa substituição do PORT e inicia o shiny-server
+USER shiny
+ENTRYPOINT ["/usr/local/bin/start-shiny.sh"]

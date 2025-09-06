@@ -1,0 +1,13 @@
+# /etc/shiny-server/shiny-server.conf.template
+run_as shiny;
+
+server {
+  listen 0.0.0.0 ${PORT};
+
+  location / {
+    # Sirva o diretório com seus apps (app.R na raiz)
+    site_dir /srv/shiny-server;
+    log_dir  /var/log/shiny-server;
+    directory_index on;
+  }
+}
